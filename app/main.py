@@ -1,3 +1,4 @@
+import uvicorn
 from fastapi import FastAPI, Depends
 from app.database.session import engine, Base
 from app.api.v1.dependencies import get_current_user
@@ -27,3 +28,8 @@ async def startup_event():
 @app.get("/me")
 async def read_current_user(current_user=Depends(get_current_user)):
     return current_user
+
+if __name__ == "__main__":
+    import multiprocessing
+    multiprocessing.freeze_support()  # для Windows
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, workers=4)

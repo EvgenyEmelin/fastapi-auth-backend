@@ -10,7 +10,7 @@ from app.database.session import get_db
 router = APIRouter(prefix="/api", tags=["Роли"])
 
 async def admin_required(current_user=Depends(get_current_user)):
-    has_access = await require_roles(["admin"])(current_user)
+    has_access = await require_roles(["admin"], current_user)
     if not has_access:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Недостаточно прав")
     return current_user

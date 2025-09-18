@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from passlib.context import CryptContext
@@ -11,11 +12,9 @@ from app.crud.users import CRUDUser
 from app.database.session import get_db
 from app.schemas.user import UserCreate, UserOut
 from app.crud.refresh_token import CRUDRefreshToken
+from app.core.config import SECRET_KEY, ALGORITHM
 
 
-# Конфигурация JWT (вынести в config.py желательно)
-SECRET_KEY = "your-secret-key"
-ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
@@ -67,15 +66,13 @@ async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
-async def login(form_data: UserLogin, db: AsyncSession = Depends(get_db)):
-    user = await CRUDUser.get_by_email(db, form_data.email)
+async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+    user = await CRUDUser.get_by_email(db, form_data.username)
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверные данные")
 
     access_token = create_access_token(data={"sub": user.email})
     refresh_token = create_refresh_token(data={"sub": user.email})
-
-    # Сохраняем refresh токен в базе
     await CRUDRefreshToken.create(db, token=refresh_token, user_id=UUID(str(user.id)))
 
     return {

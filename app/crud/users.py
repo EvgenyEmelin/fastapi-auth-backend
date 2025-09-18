@@ -1,5 +1,5 @@
 from uuid import UUID
-
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import update as sqlalchemy_update
@@ -59,3 +59,5 @@ class CRUDUser:
         user.is_active = False
         db.add(user)
         await db.commit()
+
+

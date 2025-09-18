@@ -30,7 +30,10 @@ class CRUDRefreshToken:
         db.add(token)
         await db.commit()
 
-    @staticmethod
-    async def is_token_active(db: AsyncSession, token_str: str) -> bool:
-        token = await CRUDRefreshToken.get_by_token(db, token_str)
-        return token is not None and not token.revoked
+    model = RefreshToken
+
+    @classmethod
+    async def is_token_active(cls, db: AsyncSession, token: str) -> bool:
+        result = await db.execute(select(cls.model).where(cls.model.token == token))
+        token_obj = result.scalars().first()
+        return token_obj is not None and not token_obj.revoked

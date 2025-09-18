@@ -8,6 +8,16 @@ from app.model.user import User
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+import os
+from dotenv import load_dotenv
+
+load_dotenv()  # загружает переменные из .env в окружение
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+DATABASE_URL = os.getenv("DATABASE_URL")
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
+DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
+
 class Settings(BaseSettings):
     database_url: str
     secret_key: str
@@ -42,3 +52,5 @@ def can_view_users():
 
 def can_manage_roles():
     return required_permissions(["roles:write"])
+
+

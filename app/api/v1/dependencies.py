@@ -1,11 +1,15 @@
+from typing import Optional, List
+from uuid import UUID
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from typing import Optional, List
-from pydantic import BaseModel
+from sqlalchemy.orm import selectinload
+
 from app.database.session import get_db
+from app.model import User
 from app.crud.users import CRUDUser
 from app.schemas.user import UserOut
 from app.crud.refresh_token import CRUDRefreshToken
@@ -15,7 +19,7 @@ ALGORITHM = "HS256"
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-class TokenData(BaseModel):
+class TokenData(UserOut):
     email: Optional[str] = None
 
 async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> UserOut:
@@ -29,23 +33,27 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception
-        token_data = TokenData(email=email)
     except JWTError:
         raise credentials_exception
 
-    # Проверяем пользователя
-    user = await CRUDUser.get_by_email(db, token_data.email)
-    if user is None:
+    # Получаем пользователя жадной загрузкой ролей
+    result = await db.execute(
+        select(User)
+        .options(selectinload(User.roles))
+        .where(User.email == email)
+    )
+    user = result.scalars().first()
+    if not user:
         raise credentials_exception
 
     # Проверяем, что у пользователя есть неотозванный refresh токен
-    result = await db.execute(
+    result_token = await db.execute(
         select(CRUDRefreshToken.model).where(
             CRUDRefreshToken.model.user_id == user.id,
-            CRUDRefreshToken.model.revoked == False  # поле revoked типа bool
+            CRUDRefreshToken.model.revoked == False  # поле revoked - bool
         )
     )
-    valid_token = result.scalars().first()
+    valid_token = result_token.scalars().first()
     if not valid_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token revoked")
 

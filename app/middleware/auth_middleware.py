@@ -5,12 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List
 
-from app.database.session import get_db
 from app.crud.users import CRUDUser
 from app.model.user import User
 from app.crud.refresh_token import CRUDRefreshToken
 
-# Импорт settings отложENO для исключения циклического импорта
 def get_settings():
     from app.core.config import settings
     return settings
@@ -19,9 +17,14 @@ security = HTTPBearer()
 
 async def get_current_user(
         credentials: HTTPAuthorizationCredentials = Depends(security),
-        db: AsyncSession = Depends(get_db),
+        db: AsyncSession = Depends(lambda: None),
         settings = Depends(get_settings)
 ) -> User:
+    # Отложенный импорт get_db внутри функции для избежания циклов
+    from app.database.session import get_db
+    if db is None:
+        db = await get_db().__anext__()
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -31,8 +34,8 @@ async def get_current_user(
     try:
         payload = jwt.decode(
             credentials.credentials,
-            settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM]
+            settings.secret_key,
+            algorithms=[settings.algorithm]
         )
         email: str = payload.get("sub")
         if email is None:
@@ -46,7 +49,6 @@ async def get_current_user(
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
 
-    # Проверяем, что пользователь имеет неотозванный refresh токен
     result = await db.execute(
         select(CRUDRefreshToken.model).where(
             CRUDRefreshToken.model.user_id == user.id,
@@ -58,7 +60,6 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token revoked")
 
     return user
-
 
 def required_roles(required_roles: List[str]):
     async def role_checker(current_user: User = Depends(get_current_user)):
@@ -73,12 +74,13 @@ def required_roles(required_roles: List[str]):
 
     return role_checker
 
-
 def required_permissions(required_permissions: List[str]):
     async def permission_checker(
             current_user: User = Depends(get_current_user),
-            db: AsyncSession = Depends(get_db)
+            db: AsyncSession = Depends(lambda: __import__('app.database.session').session.get_db())
     ):
+        if callable(db):
+            db = await db()
         user_permissions = []
         for role in current_user.roles:
             for role_perm in role.role_permissions:
@@ -94,10 +96,8 @@ def required_permissions(required_permissions: List[str]):
 
     return permission_checker
 
-
 def admin_required():
     return required_roles(["admin"])
-
 
 def user_required():
     return required_roles(["user", "admin"])

@@ -12,11 +12,12 @@ from app.crud.users import CRUDUser
 from app.database.session import get_db
 from app.schemas.user import UserCreate, UserOut
 from app.crud.refresh_token import CRUDRefreshToken
-from app.core.config import SECRET_KEY, ALGORITHM
+from app.core.config import settings
 
 
+SECRET_KEY = settings.secret_key
+ALGORITHM = settings.algorithm
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
-
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 

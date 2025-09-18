@@ -8,26 +8,19 @@ from app.model.user import User
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-import os
-from dotenv import load_dotenv
-
-load_dotenv()  # загружает переменные из .env в окружение
-
-SECRET_KEY = os.getenv("SECRET_KEY")
-DATABASE_URL = os.getenv("DATABASE_URL")
-ALGORITHM = os.getenv("ALGORITHM", "HS256")
-DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
 
 class Settings(BaseSettings):
     database_url: str
     secret_key: str
     algorithm: str = "HS256"
-    # другие параметры
+    debug: bool = False
+    access_token_expire_minutes: int = 15
+    refresh_token_expire_days: int = 7
 
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(env_file=".env", extra="forbid")
+
 
 settings = Settings()
-
 
 
 # Базовые зависимости
@@ -36,21 +29,24 @@ async def get_current_active_user(current_user: User = Depends(get_current_user)
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
 
+
 # Ролевые зависимости
 def get_admin_user():
     return required_roles(["admin"])
 
+
 def get_user():
     return required_roles(["user", "admin"])
+
 
 # Пермишен-зависимости
 def can_manage_users():
     return required_permissions(["users:write"])
 
+
 def can_view_users():
     return required_permissions(["users:read"])
 
+
 def can_manage_roles():
     return required_permissions(["roles:write"])
-
-

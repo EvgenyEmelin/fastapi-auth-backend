@@ -1,7 +1,8 @@
 from typing import Optional
 from uuid import UUID
 from datetime import datetime
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
+
 
 class UserBase(BaseModel):
     first_name: str
@@ -23,5 +24,5 @@ class UserOut(UserBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        orm_mode = True
+    class MyModel(BaseModel):
+        model_config = ConfigDict(from_attributes=True)

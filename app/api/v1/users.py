@@ -1,56 +1,81 @@
-from uuid import UUID
-
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
-from app.schemas.user import UserOut, UserCreate, UserUpdate, UserBase
-from app.crud.users import CRUDUser
+from uuid import UUID
+
 from app.database.session import get_db
+from app.schemas.user import UserBase, UserCreate, UserUpdate
+from app.crud.users import CRUDUser
+from app.core.config import (
+    get_current_active_user,
+    get_admin_user,
+    can_manage_users,
+    can_view_users
+)
 
-router = APIRouter(prefix="/api", tags=["Пользователи"])
+router = APIRouter()
 
-@router.post("/", response_model=UserOut)
-async def create_user(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
-    db_user = await CRUDUser.get_by_email(db, user_in.email)
-    if db_user:
-        raise HTTPException(status_code=400, detail="Email уже зарегистрирован")
-    user = await CRUDUser.create(db, user_in)
-    return user
 
+# Только аутентифицированные пользователи
+@router.get("/me", response_model=UserBase)
+async def read_user_me(current_user: UserBase = Depends(get_current_active_user)):
+    return current_user
+
+
+# Только админы могут видеть всех пользователей
 @router.get("/", response_model=List[UserBase])
 async def read_users(
-    skip: int = 0,
-    limit: int = 100,
-    db: AsyncSession = Depends(get_db)
+        skip: int = 0,
+        limit: int = 100,
+        db: AsyncSession = Depends(get_db),
+        admin_user: UserBase = Depends(get_admin_user)  # Проверка роли
 ):
     users = await CRUDUser.get_all(db, skip=skip, limit=limit)
     return users
 
 
-@router.get("/{user_id}", response_model=UserBase)
-async def read_user(user_id: str, db: AsyncSession = Depends(get_db)):
-    try:
-        # Преобразуем строку в UUID, убирая кавычки если они есть
-        user_uuid = UUID(user_id.strip('"'))
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid UUID format")
+# Или с проверкой пермишенов
+@router.get("/with-permissions", response_model=List[UserBase])
+async def read_users_with_permissions(
+        skip: int = 0,
+        limit: int = 100,
+        db: AsyncSession = Depends(get_db),
+        authorized_user: UserBase = Depends(can_view_users)  # Проверка прав
+):
+    users = await CRUDUser.get_all(db, skip=skip, limit=limit)
+    return users
 
-    user = await CRUDUser.get(db, user_uuid)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
+
+# Создание пользователя - только админы
+@router.post("/", response_model=UserBase)
+async def create_user(
+        user_in: UserCreate,
+        db: AsyncSession = Depends(get_db),
+        admin_user: UserBase = Depends(get_admin_user)
+):
+    user = await CRUDUser.get_by_email(db, user_in.email)
+    if user:
+        raise HTTPException(
+            status_code=400,
+            detail="The user with this email already exists",
+        )
+    user = await CRUDUser.create(db, user_in)
     return user
 
-@router.patch("/{user_id}", response_model=UserOut)
-async def update_user(user_id: str, user_in: UserUpdate, db: AsyncSession = Depends(get_db)):
-    user = await CRUDUser.get(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
-    updated_user = await CRUDUser.update(db, user, user_in)
-    return updated_user
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user(user_id: str, db: AsyncSession = Depends(get_db)):
+# Просмотр конкретного пользователя - либо сам пользователь, либо админ
+@router.get("/{user_id}", response_model=UserBase)
+async def read_user(
+        user_id: UUID,
+        db: AsyncSession = Depends(get_db),
+        current_user: UserBase = Depends(get_current_active_user)
+):
     user = await CRUDUser.get(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
-    await CRUDUser.soft_delete(db, user)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Пользователь может смотреть только себя, админ - всех
+    if str(current_user.id) != str(user_id) and "admin" not in [r.name for r in current_user.roles]:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+
+    return user

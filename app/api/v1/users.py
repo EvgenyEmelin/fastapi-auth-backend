@@ -1,7 +1,9 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
-from app.schemas.user import UserOut, UserCreate, UserUpdate
+from app.schemas.user import UserOut, UserCreate, UserUpdate, UserBase
 from app.crud.users import CRUDUser
 from app.database.session import get_db
 
@@ -15,16 +17,27 @@ async def create_user(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
     user = await CRUDUser.create(db, user_in)
     return user
 
-@router.get("/", response_model=List[UserOut])
-async def read_users(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
+@router.get("/", response_model=List[UserBase])
+async def read_users(
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db)
+):
     users = await CRUDUser.get_all(db, skip=skip, limit=limit)
     return users
 
-@router.get("/{user_id}", response_model=UserOut)
+
+@router.get("/{user_id}", response_model=UserBase)
 async def read_user(user_id: str, db: AsyncSession = Depends(get_db)):
-    user = await CRUDUser.get(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    try:
+        # Преобразуем строку в UUID, убирая кавычки если они есть
+        user_uuid = UUID(user_id.strip('"'))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid UUID format")
+
+    user = await CRUDUser.get(db, user_uuid)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
     return user
 
 @router.patch("/{user_id}", response_model=UserOut)

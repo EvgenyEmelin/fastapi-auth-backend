@@ -1,11 +1,14 @@
-# app/models/role.py
 import uuid
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy import String
-
 from app.model.base import Base
+
+if TYPE_CHECKING:
+    from app.model.user import User
+    from app.model.role_permission import RolePermission
+    from app.model.permission import Permission
 
 
 class Role(Base):
@@ -15,7 +18,11 @@ class Role(Base):
     name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
-    users = relationship(
+    # Отношение через ассоциативную модель
+    role_permissions: Mapped[list["RolePermission"]] = relationship("RolePermission", back_populates="role")
+
+
+    users: Mapped[list["User"]] = relationship(
         "User",
         secondary="user_roles",
         back_populates="roles"

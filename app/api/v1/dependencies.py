@@ -2,11 +2,13 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 from typing import Optional, List
 from pydantic import BaseModel
 from app.database.session import get_db
 from app.crud.users import CRUDUser
 from app.schemas.user import UserOut
+from app.crud.refresh_token import CRUDRefreshToken
 
 SECRET_KEY = "your-secret-key"
 ALGORITHM = "HS256"
@@ -31,9 +33,22 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
     except JWTError:
         raise credentials_exception
 
+    # Проверяем пользователя
     user = await CRUDUser.get_by_email(db, token_data.email)
     if user is None:
         raise credentials_exception
+
+    # Проверяем, что у пользователя есть неотозванный refresh токен
+    result = await db.execute(
+        select(CRUDRefreshToken.model).where(
+            CRUDRefreshToken.model.user_id == user.id,
+            CRUDRefreshToken.model.revoked == False  # поле revoked типа bool
+        )
+    )
+    valid_token = result.scalars().first()
+    if not valid_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token revoked")
+
     return user
 
 async def require_roles(
@@ -61,6 +76,3 @@ async def require_permissions(
             detail="Недостаточно прав: отсутствует необходимое право"
         )
     return current_user
-
-
-

@@ -17,6 +17,7 @@ import app.model.role
 import app.model.user_role
 from app.model import permission
 from app.model import refresh_token
+from app.model import role_permission
 # импортируйте все модули с таблицами и моделями
 
 # Этот объект нужен Alembic для автогенерации миграций:

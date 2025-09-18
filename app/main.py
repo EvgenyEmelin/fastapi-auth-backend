@@ -3,6 +3,7 @@ from app.database.session import engine, Base
 from app.api.v1.dependencies import get_current_user
 from app.api.v1 import auth, users, admin, roles
 
+
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

@@ -1,24 +1,32 @@
+from uuid import UUID
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import update as sqlalchemy_update
 from sqlalchemy import delete as sqlalchemy_delete
-from typing import Optional
+from typing import Optional, List
 from app.model.user import User
 from app.schemas.user import UserCreate, UserUpdate
 from passlib.context import CryptContext
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+
 class CRUDUser:
     @staticmethod
-    async def get(db: AsyncSession, user_id: str) -> Optional[User]:
+    async def get(db: AsyncSession, user_id: UUID) -> User | None:
         result = await db.execute(select(User).where(User.id == user_id))
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def get_by_email(db: AsyncSession, email: str) -> Optional[User]:
+    async def get_by_email(db: AsyncSession, email: str) -> User | None:
         result = await db.execute(select(User).where(User.email == email))
         return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_all(db: AsyncSession, skip: int = 0, limit: int = 100) -> List[User]:
+        result = await db.execute(select(User).offset(skip).limit(limit))
+        return result.scalars().all()
 
     @staticmethod
     async def create(db: AsyncSession, user_in: UserCreate) -> User:
